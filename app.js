@@ -341,7 +341,9 @@ function openItem(scope, kind, id) {
     <label>Nom<input name="name" value="${esc(it.name)}" required placeholder="Ex : ${it.kind === 'fixed' ? 'Loyer' : it.kind === 'envelope' ? 'Courses' : 'Voyage'}"></label></div>
     <label>${amountLbl}<input name="amount" inputmode="decimal" value="${it.amount}" required></label>
     ${it.kind === 'savings' ? `<div class="row2"><label>Objectif (€)<input name="target" inputmode="decimal" value="${it.target || ''}"></label>
-      <label>Déjà épargné (€)<input name="balance0" inputmode="decimal" value="${it.balance0 || ''}"></label></div>` : ''}
+      <label>Déjà épargné (€)<input name="balance0" inputmode="decimal" value="${it.balance0 || ''}"></label></div>
+      <label>Mois restants pour atteindre l’objectif<input name="months" inputmode="numeric" placeholder="Ex : 12"></label>
+      <div class="sub" id="monthsHint">Modifie le nombre de mois : l’épargne mensuelle se recalcule (et inversement).</div>` : ''}
     ${common && it.kind === 'fixed' ? `<label>Payé chaque mois par<select name="payer"><option value="">Non suivi</option>${state.members.map(m => `<option value="${m.id}" ${it.payer === m.id ? 'selected' : ''}>${esc(m.name)}</option>`).join('')}</select></label>` : ''}
     ${common ? `<label>Répartition</label>
       <div class="modes">
@@ -354,6 +356,24 @@ function openItem(scope, kind, id) {
     <div class="form-acts"><button type="button" class="btn soft" data-act="close">Annuler</button><button class="btn">Enregistrer</button></div>
   </form>`);
   if (common) updatePreview();
+  if (it.kind === 'savings') syncSavings('amount', id);
+}
+
+/** Lie épargne mensuelle, objectif, déjà épargné et mois restants. */
+function syncSavings(src, id) {
+  const f = $('form[data-form="item"]');
+  if (!f || !f.months) return;
+  const itemId = id ?? f.dataset.id;
+  const txSum = itemId ? state.txs.filter(t => t.itemId === itemId).reduce((a, t) => a + t.amount, 0) : 0;
+  const rest = Math.max(num(f.target.value) - num(f.balance0.value) - txSum, 0);
+  if (src === 'months') {
+    const m = Math.floor(num(f.months.value));
+    if (m > 0 && rest > 0) { f.amount.value = (Math.ceil(rest / m * 100) / 100).toString().replace('.', ','); updatePreview(); }
+  } else {
+    const a = num(f.amount.value);
+    f.months.value = rest > 0 && a > 0 ? Math.ceil(rest / a) : '';
+  }
+  $('#monthsHint').textContent = !num(f.target.value) ? 'Indique un objectif pour calculer la durée.' : rest === 0 ? 'Objectif atteint 🎉' : `Reste à épargner : ${eur(rest)}`;
 }
 
 function updatePreview() {
@@ -452,7 +472,11 @@ document.addEventListener('click', e => {
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => prefs().mode === 'auto' && render());
 });
 
-document.addEventListener('input', e => { if (e.target.closest('form[data-form="item"]')) updatePreview(); });
+document.addEventListener('input', e => {
+  if (!e.target.closest('form[data-form="item"]')) return;
+  updatePreview();
+  if (['amount', 'target', 'balance0', 'months'].includes(e.target.name)) syncSavings(e.target.name);
+});
 document.addEventListener('change', e => { if (e.target.name === 'itemSel') syncPayer(); });
 document.addEventListener('change', e => {
   if (e.target.id === 'imp') {
