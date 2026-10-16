@@ -111,7 +111,7 @@ dialog::before{content:"";display:block;width:40px;height:4px;border-radius:9px;
 dialog h2{font-size:19px;margin-bottom:12px}
 form{display:flex;flex-direction:column;gap:12px}
 label{display:flex;flex-direction:column;gap:5px;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
-input,select{border:0;background:var(--field);border-radius:14px;padding:13px 14px;color:var(--ink);width:100%;font-size:15px}
+input,select{border:0;background:var(--field);border-radius:14px;padding:13px 14px;color:var(--ink);width:100%;font-size:16px}
 input:focus,select:focus{outline:2px solid var(--btn)}
 input[type=range]{padding:0;accent-color:var(--btn);background:none}
 input[type=color]{height:46px;padding:4px}
@@ -133,3 +133,6 @@ html[data-theme=glass][data-mode=dark] .tabbar{background:rgba(30,30,45,.82)}
 html[data-theme=glass][data-mode=dark] body{background:
   radial-gradient(60% 40% at 10% 0%,#25507f 0,transparent 70%),radial-gradient(55% 45% at 100% 40%,#1d5c55 0,transparent 70%),
   radial-gradient(60% 50% at 0% 100%,#40306f 0,transparent 70%),radial-gradient(50% 40% at 100% 100%,#6a2a58 0,transparent 70%),#0d0d16;background-attachment:fixed}
+/* Pas de zoom : ni pincement, ni double-tap, ni zoom automatique au focus d'un champ (iOS < 16 px) */
+html{touch-action:pan-x pan-y;-webkit-text-size-adjust:100%}
+button,a,label,summary{touch-action:manipulation}

@@ -508,3 +508,6 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   }).catch(() => {});
   navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadController) location.reload(); });
 }
+
+/* iOS ignore user-scalable=no : on bloque aussi le pincement. */
+['gesturestart', 'gesturechange', 'gestureend'].forEach(t => document.addEventListener(t, e => e.preventDefault()));
