@@ -511,3 +511,5 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
 
 /* iOS ignore user-scalable=no : on bloque aussi le pincement. */
 ['gesturestart', 'gesturechange', 'gestureend'].forEach(t => document.addEventListener(t, e => e.preventDefault()));
+document.addEventListener('touchmove', e => { if (e.touches.length > 1 || (e.scale && e.scale !== 1)) e.preventDefault(); }, { passive: false });
+document.addEventListener('touchstart', e => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
