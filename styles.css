@@ -13,15 +13,8 @@ html[data-mode=dark]{
   --btn:#f3f3f7; --btn-ink:#101014; --pink-bg:#3d1f2c; --green-bg:#17372b; --yellow-bg:#3a3014; --yellow:#f3c85b;
   --t-fixed:#1d2c3d; --t-env:#3b2a1b; --t-sav:#1a3324; --shadow:none;
 }
-@media (prefers-color-scheme:dark){
-  html[data-mode=auto]{
-    --bg:#101014; --card:#1c1c23; --ink:#f3f3f7; --muted:#9a9aa8; --line:#2a2a33; --field:#26262f; --chip:#26262f;
-    --btn:#f3f3f7; --btn-ink:#101014; --pink-bg:#3d1f2c; --green-bg:#17372b; --yellow-bg:#3a3014; --yellow:#f3c85b;
-    --t-fixed:#1d2c3d; --t-env:#3b2a1b; --t-sav:#1a3324; --shadow:none;
-  }
-}
 /* Liquid Glass */
-html[data-theme=glass] body{background:
+html[data-theme=glass] body{min-height:100vh;background:
   radial-gradient(60% 40% at 10% 0%,#bfe3ff 0,transparent 70%),
   radial-gradient(50% 40% at 100% 20%,#b9f5df 0,transparent 70%),
   radial-gradient(60% 50% at 0% 100%,#d9c7ff 0,transparent 70%),
@@ -107,9 +100,8 @@ details summary{cursor:pointer;color:var(--muted);font-size:12px;font-weight:700
 /* barre d'onglets flottante + bouton + */
 .tabbar{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(14px + env(safe-area-inset-bottom));width:min(480px,calc(100% - 24px));display:flex;gap:2px;background:var(--card);border-radius:28px;padding:6px;box-shadow:0 8px 30px rgba(0,0,0,.12);z-index:5}
 .tabbar button{flex:1;border:0;background:none;display:flex;flex-direction:column;align-items:center;gap:1px;font-size:11px;font-weight:700;color:var(--muted);padding:7px 0;border-radius:22px}
-.tabbar button b{font-size:19px;font-weight:400;filter:grayscale(1);opacity:.7}
+.tabbar button b{display:flex;height:24px;align-items:center}
 .tabbar button.on{color:var(--ink);background:var(--chip)}
-.tabbar button.on b{filter:none;opacity:1}
 .fab{position:fixed;right:max(16px,calc(50% - 380px + 16px));bottom:calc(96px + env(safe-area-inset-bottom));width:56px;height:56px;border-radius:50%;border:0;background:var(--btn);color:var(--btn-ink);font-size:30px;font-weight:300;box-shadow:0 8px 24px rgba(0,0,0,.25);z-index:6}
 /* feuilles modales */
 dialog{border:0;padding:20px;width:min(520px,100vw);max-height:92vh;background:var(--card);color:var(--ink);border-radius:28px 28px 0 0;margin:auto auto 0;box-shadow:0 -10px 50px rgba(0,0,0,.25);overflow:auto}
@@ -136,3 +128,8 @@ input[type=color]{height:46px;padding:4px}
   main{padding:16px 12px 130px}h1{font-size:24px}.big{font-size:32px}
   .fab{right:16px}
 }
+html[data-theme=glass] .tabbar{background:rgba(255,255,255,.78)}
+html[data-theme=glass][data-mode=dark] .tabbar{background:rgba(30,30,45,.82)}
+html[data-theme=glass][data-mode=dark] body{background:
+  radial-gradient(60% 40% at 10% 0%,#25507f 0,transparent 70%),radial-gradient(55% 45% at 100% 40%,#1d5c55 0,transparent 70%),
+  radial-gradient(60% 50% at 0% 100%,#40306f 0,transparent 70%),radial-gradient(50% 40% at 100% 100%,#6a2a58 0,transparent 70%),#0d0d16;background-attachment:fixed}

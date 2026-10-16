@@ -103,8 +103,12 @@ function settlement() {
 }
 
 /* ---------- Rendu ---------- */
+const svg = d => `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
 const NAV = [
-  ['home', '🏡', 'Accueil'], ['common', '👫', 'Commun'], ['pers', '🙋', 'Perso'], ['settings', '⚙️', 'Réglages']
+  ['home', svg('<path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v9.5h13V10"/><path d="M10 19.5v-5h4v5"/>'), 'Accueil'],
+  ['common', svg('<circle cx="9" cy="8.5" r="3.2"/><path d="M3 19c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5"/><circle cx="17" cy="9.5" r="2.4"/><path d="M17.5 14c2.2.2 3.8 1.9 3.8 4.5"/>'), 'Commun'],
+  ['pers', svg('<circle cx="12" cy="8" r="3.6"/><path d="M5 20c0-3.9 3.1-6.5 7-6.5s7 2.6 7 6.5"/>'), 'Perso'],
+  ['settings', svg('<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>'), 'Réglages']
 ];
 const SUBS = { home: 'Ton foyer en un coup d’œil', common: 'Charges, enveloppes et épargne partagées', pers: 'Ce qui n’est qu’à toi', settings: 'Apparence, salaires et données' };
 const TITLES = { home: 'Vue d’ensemble', common: 'Budget commun', pers: 'Budget individuel', settings: 'Réglages' };
@@ -113,7 +117,7 @@ function render() {
   const nav = NAV.map(([k, ic, l]) => `<button data-act="nav" data-v="${k}" class="${ui.view === k ? 'on' : ''}"><b>${ic}</b>${l}</button>`).join('');
   $('#tabbar').innerHTML = nav;
   document.documentElement.dataset.theme = prefs().theme;
-  document.documentElement.dataset.mode = prefs().mode;
+  document.documentElement.dataset.mode = prefs().mode === 'auto' ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : prefs().mode;
   $('.fab').style.display = ui.view === 'settings' ? 'none' : '';
   $('#sub').textContent = SUBS[ui.view];
   $('#title').textContent = TITLES[ui.view];
@@ -395,6 +399,7 @@ document.addEventListener('click', e => {
     case 'demo': if (!confirm('Remplacer tes données par l’exemple ?')) return; state = seed(); break;
   }
   render();
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => prefs().mode === 'auto' && render());
 });
 
 document.addEventListener('input', e => { if (e.target.closest('form[data-form="item"]')) updatePreview(); });
@@ -434,6 +439,8 @@ document.addEventListener('submit', e => {
   }
   if (modal.open) closeModal();
   render();
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => prefs().mode === 'auto' && render());
 });
 
 render();
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => prefs().mode === 'auto' && render());
