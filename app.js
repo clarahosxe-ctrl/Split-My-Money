@@ -88,18 +88,25 @@ function memberSummary(m) {
   return r;
 }
 
-/** Qui doit combien à qui, selon les paiements notés sur les éléments communs du mois. */
+/** Dépenses communes du mois avec leur payeur, soldes de chacun et remboursements déjà faits. */
 function settlement() {
   const bal = Object.fromEntries(state.members.map(m => [m.id, 0]));
-  let any = false;
+  const paid = { ...bal }, due = { ...bal };
+  const rows = [];
+  const add = (it, amount, payer, date, note, txId) => {
+    rows.push({ it, amount, payer, date, note, txId });
+    paid[payer] += amount;
+    for (const m of state.members) due[m.id] += amount * share(it, m.id);
+  };
+  for (const it of itemsOf('common', 'fixed')) if (it.payer && memberById(it.payer)) add(it, it.amount, it.payer, '', 'Chaque mois');
   for (const t of state.txs) {
     const it = state.items.find(i => i.id === t.itemId);
-    if (!it || it.scope !== 'common' || !t.date.startsWith(ui.month) || !t.payer) continue;
-    any = true;
-    for (const m of state.members) bal[m.id] -= t.amount * share(it, m.id);
-    bal[t.payer] += t.amount;
+    if (it && it.scope === 'common' && t.payer && t.date.startsWith(ui.month)) add(it, t.amount, t.payer, t.date, t.note, t.id);
   }
-  return { any, bal };
+  const settles = (state.settles || []).filter(r => r.date.startsWith(ui.month));
+  for (const m of state.members) bal[m.id] = paid[m.id] - due[m.id];
+  for (const r of settles) { bal[r.from] += r.amount; bal[r.to] -= r.amount; }
+  return { any: rows.length > 0 || settles.length > 0, bal, paid, due, rows, settles };
 }
 
 /* ---------- Rendu ---------- */
@@ -107,11 +114,12 @@ const svg = d => `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" st
 const NAV = [
   ['home', svg('<path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v9.5h13V10"/><path d="M10 19.5v-5h4v5"/>'), 'Accueil'],
   ['common', svg('<circle cx="9" cy="8.5" r="3.2"/><path d="M3 19c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5"/><circle cx="17" cy="9.5" r="2.4"/><path d="M17.5 14c2.2.2 3.8 1.9 3.8 4.5"/>'), 'Commun'],
+  ['debts', svg('<path d="M7 4h10v16l-2-1.4-1.5 1.4L12 18.6 10.5 20 9 18.6 7 20z"/><path d="M10 9h4M10 12.5h4"/>'), 'Décompte'],
   ['pers', svg('<circle cx="12" cy="8" r="3.6"/><path d="M5 20c0-3.9 3.1-6.5 7-6.5s7 2.6 7 6.5"/>'), 'Perso'],
   ['settings', svg('<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>'), 'Réglages']
 ];
-const SUBS = { home: 'Ton foyer en un coup d’œil', common: 'Charges, enveloppes et épargne partagées', pers: 'Ce qui n’est qu’à toi', settings: 'Apparence, salaires et données' };
-const TITLES = { home: 'Vue d’ensemble', common: 'Budget commun', pers: 'Budget individuel', settings: 'Réglages' };
+const SUBS = { home: 'Ton foyer en un coup d’œil', common: 'Charges, enveloppes et épargne partagées', debts: 'Qui a payé quoi et qui doit combien', pers: 'Ce qui n’est qu’à toi', settings: 'Apparence, salaires et données' };
+const TITLES = { home: 'Vue d’ensemble', common: 'Budget commun', debts: 'Décompte du mois', pers: 'Budget individuel', settings: 'Réglages' };
 
 function render() {
   const nav = NAV.map(([k, ic, l]) => `<button data-act="nav" data-v="${k}" class="${ui.view === k ? 'on' : ''}"><b>${ic}</b>${l}</button>`).join('');
@@ -124,7 +132,7 @@ function render() {
   const [y, mo] = ui.month.split('-');
   $('#monthLabel').textContent = new Date(+y, +mo - 1, 1).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
   $('.month').style.display = ui.view === 'settings' ? 'none' : '';
-  $('#view').innerHTML = { home: viewHome, common: viewCommon, pers: viewPers, settings: viewSettings }[ui.view]();
+  $('#view').innerHTML = { home: viewHome, common: viewCommon, debts: viewDebts, pers: viewPers, settings: viewSettings }[ui.view]();
   save();
 }
 
@@ -189,7 +197,7 @@ function viewHome() {
         const a = st.bal[A.id];
         return Math.abs(a) < 0.01 ? '<div class="notice ok">Tout est équilibré 🎉</div>'
           : `<div class="notice">${esc((a < 0 ? A : B).name)} doit <b>${eur(Math.abs(a))}</b> à ${esc((a < 0 ? B : A).name)}</div>
-             <p class="lbl">Calculé d’après les dépenses communes notées ce mois-ci et la répartition de chaque ligne.</p>`;
+             <p class="lbl"><a href="#" data-act="nav" data-v="debts" style="color:inherit">Voir le détail du décompte</a></p>`;
       })() : '<p class="lbl">Note des dépenses sur les enveloppes communes en indiquant qui a payé : le calcul « qui doit combien » apparaîtra ici.</p>'}
     </div>
   </div>
@@ -213,7 +221,7 @@ function savBar(i) {
 
 function itemCard(it) {
   const common = it.scope === 'common';
-  const chips = common ? `<div class="chips"><span class="chip">${splitLabel(it)}</span>${state.members.map(m => `<span class="chip"><i style="background:${m.color}"></i>${esc(m.name)} ${eur(it.amount * share(it, m.id))}</span>`).join('')}</div>` : '';
+  const chips = common ? `<div class="chips"><span class="chip">${splitLabel(it)}</span>${it.payer && memberById(it.payer) ? `<span class="chip">Payé par ${esc(memberById(it.payer).name)}</span>` : ''}${state.members.map(m => `<span class="chip"><i style="background:${m.color}"></i>${esc(m.name)} ${eur(it.amount * share(it, m.id))}</span>`).join('')}</div>` : '';
   let body = '';
   const txs = monthTxs(it.id).sort((a, b) => b.date.localeCompare(a.date));
   if (it.kind === 'envelope') {
@@ -266,6 +274,28 @@ function viewCommon() {
     ${section('common', 'fixed')}${section('common', 'envelope')}${section('common', 'savings')}`;
 }
 
+function viewDebts() {
+  const st = settlement();
+  const [A, B] = state.members;
+  const a = st.bal[A.id];
+  const verdict = !st.any ? '<div class="notice">Rien à décompter pour ce mois-ci.</div>'
+    : Math.abs(a) < 0.01 ? '<div class="notice ok">Tout est équilibré 🎉</div>'
+    : `<div class="big">${esc((a < 0 ? A : B).name)} doit<br>${eur(Math.abs(a))}<br><span class="lbl">à ${esc((a < 0 ? B : A).name)}</span></div>`;
+  return `<div class="card">${verdict}
+    <div class="acts" style="margin-top:12px"><button class="btn sm" data-act="settle">Noter un remboursement</button></div>
+    <p class="lbl" style="margin-top:10px">Pour chaque dépense commune, la part de chacun suit la répartition choisie (50/50, pourcentage ou selon les salaires). Les charges fixes communes comptent chaque mois si tu indiques qui les paie habituellement.</p></div>
+    <div class="grid g2" style="margin-top:12px">${state.members.map(m => `<div class="card"><div class="who">${colorDot(m.color)}${esc(m.name)}</div>
+      <div class="line"><span>A payé</span><b>${eur(st.paid[m.id])}</b></div>
+      <div class="line"><span>Sa part à charge</span><b>${eur(st.due[m.id])}</b></div>
+      <div class="line"><span>Remboursements</span><b>${eur(st.bal[m.id] - (st.paid[m.id] - st.due[m.id]))}</b></div>
+      <div class="line total"><span>Solde</span>${signed(st.bal[m.id])}</div></div>`).join('')}</div>
+    <div class="sec-head"><div><h2>Dépenses payées</h2><span class="sum">${st.rows.length} ce mois-ci</span></div></div>
+    ${st.rows.length ? `<div class="card">${st.rows.sort((x, y) => y.date.localeCompare(x.date)).map(r => `<div class="line"><span>${esc(r.it.icon)} <b>${esc(r.note && r.note !== 'Chaque mois' ? r.note : r.it.name)}</b><small class="lbl" style="display:block">${r.date ? new Date(r.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }) + ' · ' : ''}${esc(r.it.name)} · payé par ${esc(memberById(r.payer).name)} · ${splitLabel(r.it)}</small></span>
+      <span style="text-align:right"><b>${eur(r.amount)}</b>${r.txId ? ` <button data-act="deltx" data-id="${r.txId}" style="border:0;background:none;color:var(--bad)" aria-label="Supprimer">✕</button>` : ''}</span></div>`).join('')}</div>`
+      : '<div class="empty">Ajoute une dépense avec le bouton + en indiquant qui a payé.</div>'}
+    ${st.settles.length ? `<div class="sec-head"><h2>Remboursements</h2></div><div class="card">${st.settles.map(r => `<div class="line"><span>${esc(memberById(r.from).name)} → ${esc(memberById(r.to).name)}<small class="lbl" style="display:block">${new Date(r.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}</small></span><span><b>${eur(r.amount)}</b> <button data-act="delsettle" data-id="${r.id}" style="border:0;background:none;color:var(--bad)" aria-label="Supprimer">✕</button></span></div>`).join('')}</div>` : ''}`;
+}
+
 function viewPers() {
   const m = memberById(ui.pers), s = memberSummary(m);
   return `<div class="seg">${state.members.map(x => `<button data-act="pers" data-id="${x.id}" class="${x.id === m.id ? 'on' : ''}">${esc(x.name)}</button>`).join('')}</div>
@@ -312,6 +342,7 @@ function openItem(scope, kind, id) {
     <label>${amountLbl}<input name="amount" inputmode="decimal" value="${it.amount}" required></label>
     ${it.kind === 'savings' ? `<div class="row2"><label>Objectif (€)<input name="target" inputmode="decimal" value="${it.target || ''}"></label>
       <label>Déjà épargné (€)<input name="balance0" inputmode="decimal" value="${it.balance0 || ''}"></label></div>` : ''}
+    ${common && it.kind === 'fixed' ? `<label>Payé chaque mois par<select name="payer"><option value="">Non suivi</option>${state.members.map(m => `<option value="${m.id}" ${it.payer === m.id ? 'selected' : ''}>${esc(m.name)}</option>`).join('')}</select></label>` : ''}
     ${common ? `<label>Répartition</label>
       <div class="modes">
         <label><input type="radio" name="mode" value="half" ${it.split.mode === 'half' ? 'checked' : ''}>50 / 50</label>
@@ -335,6 +366,23 @@ function updatePreview() {
   const [A, B] = state.members;
   $('#pctLbl').textContent = `${A.name} ${f.pct.value}% · ${B.name} ${100 - f.pct.value}%`;
   $('#preview').innerHTML = state.members.map(m => `${esc(m.name)} : <b>${eur(amount * share(tmp, m.id))}</b> (${pct(share(tmp, m.id))})`).join(' &nbsp;·&nbsp; ');
+}
+
+function openSettle() {
+  const st = settlement();
+  const [A, B] = state.members;
+  const debtor = st.bal[A.id] < 0 ? A : B, creditor = debtor === A ? B : A;
+  const today = new Date().toISOString().slice(0, 10);
+  const date = today.startsWith(ui.month) ? today : ui.month + '-01';
+  const amt = Math.abs(st.bal[A.id]) > 0.005 ? Math.abs(st.bal[A.id]).toFixed(2) : '';
+  const opts = sel => state.members.map(m => `<option value="${m.id}" ${m === sel ? 'selected' : ''}>${esc(m.name)}</option>`).join('');
+  openModal(`<h2>Noter un remboursement</h2>
+  <form data-form="settle">
+    <input class="amount-in" name="amount" inputmode="decimal" value="${amt}" placeholder="0,00 €" required>
+    <div class="row2"><label>De<select name="from">${opts(debtor)}</select></label><label>Vers<select name="to">${opts(creditor)}</select></label></div>
+    <label>Date<input type="date" name="date" value="${date}" required></label>
+    <div class="form-acts"><button type="button" class="btn soft" data-act="close">Annuler</button><button class="btn">Enregistrer</button></div>
+  </form>`);
 }
 
 function openTx(itemId) {
@@ -373,6 +421,8 @@ document.addEventListener('click', e => {
     case 'theme': prefs().theme = d.v; break;
     case 'mode': prefs().mode = d.v; break;
     case 'quick': return openTx();
+    case 'settle': return openSettle();
+    case 'delsettle': state.settles = state.settles.filter(r => r.id !== d.id); break;
     case 'month-prev': case 'month-next': {
       const [y, m] = ui.month.split('-').map(Number);
       const dt = new Date(y, m - 1 + (d.act === 'month-next' ? 1 : -1), 1);
@@ -426,9 +476,14 @@ document.addEventListener('submit', e => {
   } else if (d.form === 'item') {
     const data = { icon: v.icon.value || '•', name: v.name.value.trim(), amount: num(v.amount.value) };
     if (d.kind === 'savings') Object.assign(data, { target: num(v.target.value), balance0: num(v.balance0.value) });
+    if (v.payer) data.payer = v.payer.value;
     if (d.scope === 'common') data.split = { mode: v.mode.value, pct: +v.pct.value };
     if (d.id) Object.assign(state.items.find(i => i.id === d.id), data);
     else state.items.push({ id: uid(), scope: d.scope, kind: d.kind, ...data });
+  } else if (d.form === 'settle') {
+    const amount = num(v.amount.value);
+    if (!amount || v.from.value === v.to.value) return;
+    (state.settles = state.settles || []).push({ id: uid(), amount, from: v.from.value, to: v.to.value, date: v.date.value });
   } else if (d.form === 'tx') {
     const amount = num(v.amount.value);
     if (!amount) return;
@@ -444,3 +499,12 @@ matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => pref
 
 render();
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => prefs().mode === 'auto' && render());
+
+/* Appli installable : le service worker se met à jour tout seul, sans réinstaller le raccourci. */
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+  const hadController = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.register('sw.js').then(reg => {
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) reg.update().catch(() => {}); });
+  }).catch(() => {});
+  navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadController) location.reload(); });
+}
