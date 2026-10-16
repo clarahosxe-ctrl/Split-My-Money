@@ -43,6 +43,7 @@ function seed() {
   };
 }
 let state = load();
+function prefs() { return state.prefs || (state.prefs = { theme: 'classic', mode: 'auto' }); }
 const ui = { view: 'home', pers: 'a', month: new Date().toISOString().slice(0, 7) };
 
 function load() {
@@ -105,12 +106,16 @@ function settlement() {
 const NAV = [
   ['home', '🏡', 'Accueil'], ['common', '👫', 'Commun'], ['pers', '🙋', 'Perso'], ['settings', '⚙️', 'Réglages']
 ];
+const SUBS = { home: 'Ton foyer en un coup d’œil', common: 'Charges, enveloppes et épargne partagées', pers: 'Ce qui n’est qu’à toi', settings: 'Apparence, salaires et données' };
 const TITLES = { home: 'Vue d’ensemble', common: 'Budget commun', pers: 'Budget individuel', settings: 'Réglages' };
 
 function render() {
   const nav = NAV.map(([k, ic, l]) => `<button data-act="nav" data-v="${k}" class="${ui.view === k ? 'on' : ''}"><b>${ic}</b>${l}</button>`).join('');
-  $('#nav').innerHTML = nav;
   $('#tabbar').innerHTML = nav;
+  document.documentElement.dataset.theme = prefs().theme;
+  document.documentElement.dataset.mode = prefs().mode;
+  $('.fab').style.display = ui.view === 'settings' ? 'none' : '';
+  $('#sub').textContent = SUBS[ui.view];
   $('#title').textContent = TITLES[ui.view];
   const [y, mo] = ui.month.split('-');
   $('#monthLabel').textContent = new Date(+y, +mo - 1, 1).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
@@ -158,17 +163,17 @@ function viewHome() {
   const savs = state.items.filter(i => i.kind === 'savings' && i.target);
 
   return `
-  <div class="card hero">
+  <div class="card">
     <div class="lbl">Reste à vivre du foyer · par mois</div>
     <div class="big ${left < 0 ? 'neg' : ''}">${eur(left)}</div>
-    <div class="row">
-      <div><small>Revenus nets</small><b>${eur(salary)}</b></div>
-      <div><small>Engagé</small><b>${eur(salary - left)}</b></div>
-      <div><small>Épargne / mois</small><b>${eur(state.items.filter(i => i.kind === 'savings').reduce((s, i) => s + i.amount, 0))}</b></div>
+    <div class="mini-row">
+      <div class="mini g">Revenus nets<b>${eur(salary)}</b></div>
+      <div class="mini p">Engagé<b>${eur(salary - left)}</b></div>
+      <div class="mini y">Épargne / mois<b>${eur(state.items.filter(i => i.kind === 'savings').reduce((s, i) => s + i.amount, 0))}</b></div>
     </div>
   </div>
-  <div class="grid g2" style="margin-top:16px">${sums.map(memberCard).join('')}</div>
-  <div class="grid g2" style="margin-top:16px">
+  <div class="grid g2" style="margin-top:12px">${sums.map(memberCard).join('')}</div>
+  <div class="grid g2" style="margin-top:12px">
     <div class="card"><h2>Répartition du budget commun</h2>
       <div class="donut-wrap">
         <div class="donut" style="background:conic-gradient(${grad})"><b><span>${eur(cTotal)}<br><small class="lbl">/ mois</small></span></b></div>
@@ -178,13 +183,13 @@ function viewHome() {
     <div class="card"><h2>Équilibre du mois</h2>
       ${st.any ? (() => {
         const a = st.bal[A.id];
-        return Math.abs(a) < 0.01 ? '<div class="notice">Tout est équilibré 🎉</div>'
+        return Math.abs(a) < 0.01 ? '<div class="notice ok">Tout est équilibré 🎉</div>'
           : `<div class="notice">${esc((a < 0 ? A : B).name)} doit <b>${eur(Math.abs(a))}</b> à ${esc((a < 0 ? B : A).name)}</div>
              <p class="lbl">Calculé d’après les dépenses communes notées ce mois-ci et la répartition de chaque ligne.</p>`;
       })() : '<p class="lbl">Note des dépenses sur les enveloppes communes en indiquant qui a payé : le calcul « qui doit combien » apparaîtra ici.</p>'}
     </div>
   </div>
-  <div class="grid g2" style="margin-top:16px">
+  <div class="grid g2" style="margin-top:12px">
     <div class="card"><h2>Enveloppes ce mois-ci</h2>
       ${envs.length ? envs.map(i => `<div style="margin-bottom:12px"><div class="meta"><span>${i.icon} ${esc(i.name)}</span><span>${eur(spent(i))} / ${eur(i.amount)}</span></div>${envBar(i)}</div>`).join('') : '<p class="lbl">Aucune dépense notée ce mois-ci.</p>'}
     </div>
@@ -222,13 +227,13 @@ function itemCard(it) {
   }
   const canTx = it.kind !== 'fixed';
   const txLbl = it.kind === 'savings' ? 'Versement' : 'Dépense';
-  return `<div class="item">
+  return `<div class="item k-${it.kind}">
     <div class="item-top"><div class="emoji">${esc(it.icon)}</div>
       <div class="nm">${esc(it.name)}<small>${KINDS[it.kind].one}${common ? ' commune' : ''}</small></div>
       <div class="amt">${eur(it.amount)}<small class="lbl" style="display:block">/ mois</small></div></div>
     ${chips}${body}
     <div class="acts">
-      ${canTx ? `<button class="btn sm" data-act="tx" data-id="${it.id}">+ ${txLbl}</button>` : ''}
+      ${canTx ? `<button class="btn sm ${it.kind === 'savings' ? 'inc' : 'exp'}" data-act="tx" data-id="${it.id}">${it.kind === 'savings' ? '+' : '−'} ${txLbl}</button>` : ''}
       <button class="btn soft sm" data-act="edit" data-id="${it.id}">Modifier</button>
       <button class="btn ghost sm" data-act="del" data-id="${it.id}">Supprimer</button>
     </div>
@@ -250,9 +255,9 @@ function viewCommon() {
   const list = state.items.filter(i => i.scope === 'common');
   const tot = list.reduce((s, i) => s + i.amount, 0);
   const a = list.reduce((s, i) => s + i.amount * share(i, A.id), 0);
-  return `<div class="card hero"><div class="lbl">Total des dépenses communes · par mois</div><div class="big">${eur(tot)}</div>
-    <div class="row"><div><small>${esc(A.name)} paie</small><b>${eur(a)} (${pct(tot ? a / tot : .5)})</b></div>
-    <div><small>${esc(B.name)} paie</small><b>${eur(tot - a)} (${pct(tot ? 1 - a / tot : .5)})</b></div></div></div>
+  return `<div class="card"><div class="lbl">Total des dépenses communes · par mois</div><div class="big">${eur(tot)}</div>
+    <div class="mini-row"><div class="mini">${esc(A.name)} paie<b>${eur(a)} · ${pct(tot ? a / tot : .5)}</b></div>
+    <div class="mini">${esc(B.name)} paie<b>${eur(tot - a)} · ${pct(tot ? 1 - a / tot : .5)}</b></div></div></div>
     <p class="lbl" style="margin-top:12px">Choisis pour chaque ligne : 50/50, un pourcentage libre, ou équitable selon les salaires (${esc(A.name)} ${pct(totalSalary() ? A.salary / totalSalary() : .5)} · ${esc(B.name)} ${pct(totalSalary() ? B.salary / totalSalary() : .5)}). Tout se recalcule automatiquement.</p>
     ${section('common', 'fixed')}${section('common', 'envelope')}${section('common', 'savings')}`;
 }
@@ -260,8 +265,8 @@ function viewCommon() {
 function viewPers() {
   const m = memberById(ui.pers), s = memberSummary(m);
   return `<div class="seg">${state.members.map(x => `<button data-act="pers" data-id="${x.id}" class="${x.id === m.id ? 'on' : ''}">${esc(x.name)}</button>`).join('')}</div>
-    <div class="card hero" style="margin-top:16px"><div class="lbl">Reste à vivre de ${esc(m.name)} · par mois</div><div class="big ${s.left < 0 ? 'neg' : ''}">${eur(s.left)}</div>
-    <div class="row"><div><small>Salaire net</small><b>${eur(m.salary)}</b></div><div><small>Part commune</small><b>${eur(s.cFixed + s.cEnv + s.cSav)}</b></div><div><small>Perso engagé</small><b>${eur(s.pFixed + s.pEnv + s.pSav)}</b></div></div></div>
+    <div class="card" style="margin-top:12px"><div class="lbl">Reste à vivre de ${esc(m.name)} · par mois</div><div class="big ${s.left < 0 ? 'neg' : ''}">${eur(s.left)}</div>
+    <div class="mini-row"><div class="mini g">Salaire net<b>${eur(m.salary)}</b></div><div class="mini">Part commune<b>${eur(s.cFixed + s.cEnv + s.cSav)}</b></div><div class="mini p">Perso engagé<b>${eur(s.pFixed + s.pEnv + s.pSav)}</b></div></div></div>
     ${section(m.id, 'fixed')}${section(m.id, 'envelope')}${section(m.id, 'savings')}`;
 }
 
@@ -273,10 +278,15 @@ function viewSettings() {
       <label>Couleur<input type="color" name="color" value="${m.color}" style="height:42px;padding:4px"></label>
       <div class="form-acts"><button class="btn sm">Enregistrer</button></div>
     </form></div>`).join('')}</div>
-    <div class="card" style="margin-top:16px"><h2>Données</h2>
+    <div class="card" style="margin-top:12px"><h2>Apparence</h2>
+      <div class="seg" style="display:flex">${[['classic', 'Classique'], ['glass', 'Liquid Glass']].map(([k, l]) => `<button style="flex:1" data-act="theme" data-v="${k}" class="${prefs().theme === k ? 'on' : ''}">${l}</button>`).join('')}</div>
+      <p class="lbl" style="margin:12px 0 6px">Mode</p>
+      <div class="seg" style="display:flex">${[['light', 'Clair'], ['dark', 'Sombre'], ['auto', 'Automatique']].map(([k, l]) => `<button style="flex:1" data-act="mode" data-v="${k}" class="${prefs().mode === k ? 'on' : ''}">${l}</button>`).join('')}</div>
+    </div>
+    <div class="card" style="margin-top:12px"><h2>Données</h2>
       <p class="lbl">Tout est enregistré dans ton navigateur. Exporte une sauvegarde pour la garder ou la transférer.</p>
       <div class="acts"><button class="btn soft sm" data-act="export">Exporter (JSON)</button>
-      <label class="btn soft sm" style="flex-direction:row;cursor:pointer">Importer<input type="file" id="imp" accept="application/json" hidden></label>
+      <label class="btn soft sm" style="flex-direction:row;cursor:pointer;text-transform:none;letter-spacing:0;color:inherit;font-size:13px">Importer<input type="file" id="imp" accept="application/json" hidden></label>
       <button class="btn danger sm" data-act="reset">Tout effacer</button>
       <button class="btn ghost sm" data-act="demo">Recharger l’exemple</button></div></div>`;
 }
@@ -306,7 +316,7 @@ function openItem(scope, kind, id) {
       </div>
       <label id="pctBox" ${it.split.mode === 'percent' ? '' : 'hidden'}><span id="pctLbl"></span><input type="range" name="pct" min="0" max="100" value="${it.split.pct}"></label>
       <div class="preview" id="preview"></div>` : ''}
-    <div class="form-acts"><button type="button" class="btn ghost" data-act="close">Annuler</button><button class="btn">Enregistrer</button></div>
+    <div class="form-acts"><button type="button" class="btn soft" data-act="close">Annuler</button><button class="btn">Enregistrer</button></div>
   </form>`);
   if (common) updatePreview();
 }
@@ -324,18 +334,28 @@ function updatePreview() {
 }
 
 function openTx(itemId) {
-  const it = state.items.find(i => i.id === itemId);
-  const common = it.scope === 'common';
+  const it = itemId && state.items.find(i => i.id === itemId);
+  const choices = state.items.filter(i => i.kind !== 'fixed' && (i.scope === 'common' || i.scope === ui.pers || ui.view !== 'pers'));
   const today = new Date().toISOString().slice(0, 10);
   const date = today.startsWith(ui.month) ? today : ui.month + '-01';
-  const lbl = it.kind === 'savings' ? 'Versement' : 'Dépense';
-  openModal(`<h2>${esc(it.icon)} ${esc(it.name)} · ${lbl}</h2>
-  <form data-form="tx" data-id="${itemId}">
-    <div class="row2"><label>Montant (€)<input name="amount" inputmode="decimal" required autofocus></label><label>Date<input type="date" name="date" value="${date}" required></label></div>
+  const lbl = it && it.kind === 'savings' ? 'Versement' : 'Dépense';
+  const who = i => i.scope === 'common' ? 'Commun' : memberById(i.scope).name;
+  openModal(`<h2>${it ? esc(it.icon) + ' ' + esc(it.name) + ' · ' + lbl : 'Nouvelle ligne'}</h2>
+  <form data-form="tx" data-id="${itemId || ''}">
+    <input class="amount-in" name="amount" inputmode="decimal" placeholder="0,00 €" required autofocus>
+    ${it ? '' : `<label>Enveloppe<select name="itemSel">${choices.map(i => `<option value="${i.id}">${esc(i.icon)} ${esc(i.name)} · ${esc(who(i))}</option>`).join('')}</select></label>`}
+    <div class="row2"><label>Date<input type="date" name="date" value="${date}" required></label>
+    <label id="payerBox" ${it && it.scope !== 'common' ? 'hidden' : ''}>Payé par<select name="payer">${state.members.map(m => `<option value="${m.id}">${esc(m.name)}</option>`).join('')}</select></label></div>
     <label>Note<input name="note" placeholder="Optionnel"></label>
-    ${common ? `<label>${it.kind === 'savings' ? 'Versé par' : 'Payé par'}<select name="payer">${state.members.map(m => `<option value="${m.id}">${esc(m.name)}</option>`).join('')}</select></label>` : ''}
-    <div class="form-acts"><button type="button" class="btn ghost" data-act="close">Annuler</button><button class="btn">Ajouter</button></div>
+    <div class="form-acts"><button type="button" class="btn soft" data-act="close">Annuler</button><button class="btn">Ajouter</button></div>
   </form>`);
+  if (!it) syncPayer();
+}
+function syncPayer() {
+  const f = $('form[data-form="tx"]');
+  if (!f || !f.itemSel) return;
+  const it = state.items.find(i => i.id === f.itemSel.value);
+  $('#payerBox').hidden = !it || it.scope !== 'common';
 }
 
 /* ---------- Événements ---------- */
@@ -346,6 +366,9 @@ document.addEventListener('click', e => {
   switch (d.act) {
     case 'nav': ui.view = d.v; break;
     case 'pers': ui.pers = d.id; break;
+    case 'theme': prefs().theme = d.v; break;
+    case 'mode': prefs().mode = d.v; break;
+    case 'quick': return openTx();
     case 'month-prev': case 'month-next': {
       const [y, m] = ui.month.split('-').map(Number);
       const dt = new Date(y, m - 1 + (d.act === 'month-next' ? 1 : -1), 1);
@@ -375,6 +398,7 @@ document.addEventListener('click', e => {
 });
 
 document.addEventListener('input', e => { if (e.target.closest('form[data-form="item"]')) updatePreview(); });
+document.addEventListener('change', e => { if (e.target.name === 'itemSel') syncPayer(); });
 document.addEventListener('change', e => {
   if (e.target.id === 'imp') {
     const r = new FileReader();
@@ -403,7 +427,9 @@ document.addEventListener('submit', e => {
   } else if (d.form === 'tx') {
     const amount = num(v.amount.value);
     if (!amount) return;
-    state.txs.push({ id: uid(), itemId: d.id, amount, date: v.date.value, note: v.note.value.trim(), payer: v.payer ? v.payer.value : null });
+    const itemId = d.id || v.itemSel.value;
+    const target = state.items.find(i => i.id === itemId);
+    state.txs.push({ id: uid(), itemId, amount, date: v.date.value, note: v.note.value.trim(), payer: target.scope === 'common' ? v.payer.value : null });
     if (!v.date.value.startsWith(ui.month)) ui.month = v.date.value.slice(0, 7);
   }
   if (modal.open) closeModal();
