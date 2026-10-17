@@ -136,3 +136,10 @@ html[data-theme=glass][data-mode=dark] body{background:
 /* Pas de zoom : ni pincement, ni double-tap, ni zoom automatique au focus d'un champ (iOS < 16 px) */
 html{touch-action:pan-x pan-y;-webkit-text-size-adjust:100%}
 button,a,label,summary{touch-action:manipulation}
+
+.recap{display:grid;grid-template-columns:1.4fr repeat(3,1fr);gap:0;font-size:13px;font-weight:600}
+.recap>div{padding:9px 4px;border-bottom:1px solid var(--line);text-align:right}
+.recap>div:nth-child(4n+1){text-align:left}
+.recap .rh{color:var(--muted);font-size:12px}
+.recap .rt{font-weight:800;border-bottom:0;border-top:2px solid var(--line)}
+@media (max-width:400px){.recap{font-size:12px}}

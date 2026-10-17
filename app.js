@@ -283,7 +283,8 @@ function itemCard(it) {
 function section(scope, kind) {
   const list = itemsOf(scope, kind);
   const total = list.reduce((s, i) => s + i.amount, 0);
-  return `<div class="sec-head"><div><h2>${KINDS[kind].label}</h2><span class="sum">${KINDS[kind].hint} · ${eur(total)}/mois</span></div>
+  const by = scope === 'common' ? `<div class="chips" style="margin-top:6px">${state.members.map(m => `<span class="chip"><i style="background:${m.color}"></i>${esc(m.name)} ${eur(list.reduce((s, i) => s + i.amount * share(i, m.id), 0))}</span>`).join('')}</div>` : '';
+  return `<div class="sec-head"><div><h2>${KINDS[kind].label}</h2><span class="sum">${KINDS[kind].hint} · ${eur(total)}/mois</span>${by}</div>
     <button class="btn soft sm" data-act="add" data-scope="${scope}" data-kind="${kind}">+ Ajouter</button></div>
     ${list.length ? `<div class="grid g2">${list.map(itemCard).join('')}</div>` : '<div class="empty">Rien pour le moment.</div>'}`;
 }
@@ -296,6 +297,13 @@ function viewCommon() {
   return `<div class="card"><div class="lbl">Total des dépenses communes · par mois</div><div class="big">${eur(tot)}</div>
     <div class="mini-row"><div class="mini">${esc(A.name)} paie<b>${eur(a)} · ${pct(tot ? a / tot : .5)}</b></div>
     <div class="mini">${esc(B.name)} paie<b>${eur(tot - a)} · ${pct(tot ? 1 - a / tot : .5)}</b></div></div></div>
+    <div class="card" style="margin-top:12px"><h2>Récapitulatif : qui paye combien</h2>
+      <div class="recap"><div class="rh"></div><div class="rh">Total</div>${state.members.map(m => `<div class="rh"><span class="dot" style="background:${m.color}"></span> ${esc(m.name)}</div>`).join('')}
+      ${['fixed', 'envelope', 'savings'].map(k => {
+        const l = itemsOf('common', k);
+        return `<div>${KINDS[k].label}</div><div>${eur(l.reduce((s, i) => s + i.amount, 0))}</div>${state.members.map(m => `<div>${eur(l.reduce((s, i) => s + i.amount * share(i, m.id), 0))}</div>`).join('')}`;
+      }).join('')}
+      <div class="rt">Total</div><div class="rt">${eur(tot)}</div>${state.members.map(m => `<div class="rt">${eur(list.reduce((s, i) => s + i.amount * share(i, m.id), 0))}</div>`).join('')}</div></div>
     <p class="lbl" style="margin-top:12px">Choisis pour chaque ligne : 50/50, un pourcentage libre, ou équitable selon les salaires (${esc(A.name)} ${pct(totalSalary() ? A.salary / totalSalary() : .5)} · ${esc(B.name)} ${pct(totalSalary() ? B.salary / totalSalary() : .5)}). Tout se recalcule automatiquement.</p>
     ${section('common', 'fixed')}${section('common', 'envelope')}${section('common', 'savings')}`;
 }
