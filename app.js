@@ -360,7 +360,10 @@ function viewSettings() {
       <div class="acts"><button class="btn soft sm" data-act="export">Exporter (JSON)</button>
       <label class="btn soft sm" style="flex-direction:row;cursor:pointer;text-transform:none;letter-spacing:0;color:inherit;font-size:13px">Importer<input type="file" id="imp" accept="application/json" hidden></label>
       <button class="btn danger sm" data-act="reset">Tout effacer</button>
-      <button class="btn ghost sm" data-act="demo">Recharger l’exemple</button></div></div>`;
+      <button class="btn ghost sm" data-act="demo">Recharger l’exemple</button></div></div>
+    <div class="card" style="margin-top:12px"><h2>Mise à jour</h2>
+      <p class="lbl">Version chargée : <b id="ver">${loadedVersion || '—'}</b>. L’appli se recharge toute seule quand une nouvelle version est publiée.</p>
+      <div class="acts"><button class="btn soft sm" data-act="update">Rechercher une mise à jour</button></div></div>`;
 }
 
 /* ---------- Modales ---------- */
@@ -479,6 +482,7 @@ document.addEventListener('click', e => {
     case 'theme': prefs().theme = d.v; break;
     case 'mode': prefs().mode = d.v; break;
     case 'quick': return openTx();
+    case 'update': return forceUpdate();
     case 'fold': { const f = prefs().fold || (prefs().fold = {}); f[d.k] = !f[d.k]; break; }
     case 'settle': return openSettle();
     case 'delsettle': state.settles = state.settles.filter(r => r.id !== d.id); break;
@@ -570,6 +574,28 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
     document.addEventListener('visibilitychange', () => { if (!document.hidden) reg.update().catch(() => {}); });
   }).catch(() => {});
   navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadController) location.reload(); });
+}
+
+/* Une appli « relancée » depuis l'arrière-plan n'est pas rechargée : on compare donc les fichiers publiés
+   à ceux chargés, à chaque retour au premier plan, et on recharge s'ils ont changé. */
+const FILES = ['index.html', 'styles.css', 'app.js'];
+async function fingerprint() {
+  const parts = await Promise.all(FILES.map(f => fetch(f + '?_=' + Date.now(), { cache: 'no-store' }).then(r => r.text())));
+  let h = 0;
+  for (const c of parts.join('\u0000')) h = (h * 31 + c.charCodeAt(0)) | 0;
+  return (h >>> 0).toString(36);
+}
+let loadedVersion = null;
+if (location.protocol.startsWith('http')) {
+  fingerprint().then(v => { loadedVersion = v; const el = $('#ver'); if (el) el.textContent = v; }).catch(() => {});
+  const check = () => fingerprint().then(v => { if (loadedVersion && v !== loadedVersion) location.reload(); }).catch(() => {});
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) check(); });
+  setInterval(() => { if (!document.hidden) check(); }, 5 * 60 * 1000);
+}
+async function forceUpdate() {
+  try { for (const r of await navigator.serviceWorker.getRegistrations()) await r.unregister(); } catch (e) { /* ignore */ }
+  try { for (const k of await caches.keys()) await caches.delete(k); } catch (e) { /* ignore */ }
+  location.reload();
 }
 
 /* iOS ignore user-scalable=no : on bloque aussi le pincement. */
