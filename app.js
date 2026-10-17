@@ -280,13 +280,17 @@ function itemCard(it) {
   </div>`;
 }
 
+const isOpen = k => !(prefs().fold || {})[k];
+const chev = open => `<svg class="chev ${open ? 'open' : ''}" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>`;
+
 function section(scope, kind) {
   const list = itemsOf(scope, kind);
   const total = list.reduce((s, i) => s + i.amount, 0);
+  const key = `${scope}:${kind}`, open = isOpen(key);
   const by = scope === 'common' ? `<div class="chips" style="margin-top:6px">${state.members.map(m => `<span class="chip"><i style="background:${m.color}"></i>${esc(m.name)} ${eur(list.reduce((s, i) => s + i.amount * share(i, m.id), 0))}</span>`).join('')}</div>` : '';
-  return `<div class="sec-head"><div><h2>${KINDS[kind].label}</h2><span class="sum">${KINDS[kind].hint} · ${eur(total)}/mois</span>${by}</div>
+  return `<div class="sec-head"><div class="fold" data-act="fold" data-k="${key}" role="button" aria-expanded="${open}"><div class="fold-t"><h2>${KINDS[kind].label}</h2>${chev(open)}</div><span class="sum">${open ? KINDS[kind].hint + ' · ' : ''}<b>${eur(total)}</b>/mois · ${list.length} ligne${list.length > 1 ? 's' : ''}</span>${by}</div>
     <button class="btn soft sm" data-act="add" data-scope="${scope}" data-kind="${kind}">+ Ajouter</button></div>
-    ${list.length ? `<div class="grid g2">${list.map(itemCard).join('')}</div>` : '<div class="empty">Rien pour le moment.</div>'}`;
+    ${!open ? '' : list.length ? `<div class="grid g2">${list.map(itemCard).join('')}</div>` : '<div class="empty">Rien pour le moment.</div>'}`;
 }
 
 function viewCommon() {
@@ -297,9 +301,9 @@ function viewCommon() {
   return `<div class="card"><div class="lbl">Total des dépenses communes · par mois</div><div class="big">${eur(tot)}</div>
     <div class="mini-row"><div class="mini">${esc(A.name)} paie<b>${eur(a)} · ${pct(tot ? a / tot : .5)}</b></div>
     <div class="mini">${esc(B.name)} paie<b>${eur(tot - a)} · ${pct(tot ? 1 - a / tot : .5)}</b></div></div></div>
-    <div class="card" style="margin-top:12px"><h2>Récapitulatif : qui paye combien</h2>
-      <div class="recap"><div class="rh"></div><div class="rh">Total</div>${state.members.map(m => `<div class="rh"><span class="dot" style="background:${m.color}"></span> ${esc(m.name)}</div>`).join('')}
-      ${['fixed', 'envelope', 'savings'].map(k => {
+    <div class="card" style="margin-top:12px"><div class="fold" data-act="fold" data-k="recap" role="button" aria-expanded="${isOpen('recap')}"><div class="fold-t"><h2 style="margin:0">Récapitulatif : qui paye combien</h2>${chev(isOpen('recap'))}</div></div>
+      <div class="recap" style="margin-top:8px"><div class="rh"></div><div class="rh">Total</div>${state.members.map(m => `<div class="rh"><span class="dot" style="background:${m.color}"></span> ${esc(m.name)}</div>`).join('')}
+      ${!isOpen('recap') ? '' : ['fixed', 'envelope', 'savings'].map(k => {
         const l = itemsOf('common', k);
         return `<div>${KINDS[k].label}</div><div>${eur(l.reduce((s, i) => s + i.amount, 0))}</div>${state.members.map(m => `<div>${eur(l.reduce((s, i) => s + i.amount * share(i, m.id), 0))}</div>`).join('')}`;
       }).join('')}
@@ -475,6 +479,7 @@ document.addEventListener('click', e => {
     case 'theme': prefs().theme = d.v; break;
     case 'mode': prefs().mode = d.v; break;
     case 'quick': return openTx();
+    case 'fold': { const f = prefs().fold || (prefs().fold = {}); f[d.k] = !f[d.k]; break; }
     case 'settle': return openSettle();
     case 'delsettle': state.settles = state.settles.filter(r => r.id !== d.id); break;
     case 'month-prev': case 'month-next': {

@@ -143,3 +143,10 @@ button,a,label,summary{touch-action:manipulation}
 .recap .rh{color:var(--muted);font-size:12px}
 .recap .rt{font-weight:800;border-bottom:0;border-top:2px solid var(--line)}
 @media (max-width:400px){.recap{font-size:12px}}
+
+.fold{cursor:pointer;flex:1;min-width:0;-webkit-tap-highlight-color:transparent}
+.fold-t{display:flex;align-items:center;gap:6px}
+.fold-t h2{margin:0}
+.chev{flex:none;color:var(--muted);transition:transform .2s;transform:rotate(-90deg)}
+.chev.open{transform:rotate(0)}
+.sec-head .sum b{color:var(--ink)}
