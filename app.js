@@ -42,14 +42,40 @@ function seed() {
     txs: []
   };
 }
-let state = load();
+let state;
 function prefs() { return state.prefs || (state.prefs = { theme: 'classic', mode: 'auto' }); }
 const ui = { view: 'home', pers: 'a', month: new Date().toISOString().slice(0, 7) };
 
 function load() {
-  try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.members && s.items) return s; } catch (e) { /* ignore */ }
-  return seed();
+  let st = null;
+  try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.members && s.items) st = s; } catch (e) { /* ignore */ }
+  return migrate(st || seed());
 }
+
+/** Ajouts de données ponctuels (appliqués une seule fois par appareil, repérés par un drapeau). */
+const CLARA_ITEMS = [
+  ['fixed', 'Téléphone', '📱', 10], ['fixed', 'Spotify', '🎧', 15], ['fixed', 'ChatGPT', '🤖', 8],
+  ['fixed', 'Claude', '🧠', 22], ['fixed', 'Apple', '🍎', 1], ['fixed', 'Google', '🔎', 2],
+  ['envelope', 'Vêtements', '👗', 100], ['envelope', 'Beauté / coiffure', '💅', 40], ['envelope', 'Amazon / achats divers', '📦', 50],
+  ['envelope', 'Loisirs personnels', '🎨', 50], ['envelope', 'Cadeaux', '🎁', 30], ['envelope', 'Projet entreprise', '💼', 50],
+  ['savings', 'Épargne personnelle', '💰', 30]
+];
+const DEMO_PERSO_A = [['Abonnement téléphone', 20], ['Shopping', 100], ['Beauté', 50], ['Épargne perso', 80]];
+function migrate(st) {
+  st.migrations = st.migrations || {};
+  if (!st.migrations.clara1 && st.members[0]) {
+    const owner = st.members[0].id;
+    // retire d'abord les lignes d'exemple restées intactes, pour éviter les doublons
+    st.items = st.items.filter(i => !(i.scope === owner && DEMO_PERSO_A.some(([n, a]) => i.name === n && i.amount === a)));
+    for (const [kind, name, icon, amount] of CLARA_ITEMS) {
+      if (!st.items.some(i => i.scope === owner && i.name === name)) st.items.push({ id: uid(), scope: owner, kind, name, icon, amount, ...(kind === 'savings' ? { target: 0, balance0: 0 } : {}) });
+    }
+    st.migrations.clara1 = true;
+  }
+  return st;
+}
+state = load();
+
 function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { /* ignore */ } }
 
 /* ---------- Calculs ---------- */
@@ -482,7 +508,7 @@ document.addEventListener('change', e => {
   if (e.target.id === 'imp') {
     const r = new FileReader();
     r.onload = () => {
-      try { const s = JSON.parse(r.result); if (!s.members || !s.items) throw 0; state = { txs: [], ...s }; render(); }
+      try { const s = JSON.parse(r.result); if (!s.members || !s.items) throw 0; state = migrate({ txs: [], ...s }); render(); }
       catch (err) { alert('Fichier invalide.'); }
     };
     r.readAsText(e.target.files[0]);
