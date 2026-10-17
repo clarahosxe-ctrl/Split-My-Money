@@ -153,88 +153,148 @@ function render() {
   document.documentElement.dataset.theme = prefs().theme;
   document.documentElement.dataset.mode = prefs().mode === 'auto' ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : prefs().mode;
   $('.fab').style.display = ui.view === 'settings' ? 'none' : '';
-  $('#sub').textContent = SUBS[ui.view];
+  $('#sub').textContent = ui.view === 'home' ? new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }) : SUBS[ui.view];
   $('#title').textContent = TITLES[ui.view];
   const [y, mo] = ui.month.split('-');
   $('#monthLabel').textContent = new Date(+y, +mo - 1, 1).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
   $('.month').style.display = ui.view === 'settings' ? 'none' : '';
   $('#view').innerHTML = { home: viewHome, common: viewCommon, debts: viewDebts, pers: viewPers, settings: viewSettings }[ui.view]();
+  if (ui.view === 'home') runCounts();
   save();
+}
+
+function runCounts() {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  document.querySelectorAll('[data-count]').forEach(el => {
+    const to = +el.dataset.count, t0 = performance.now(), dur = 800;
+    const tick = t => {
+      const k = Math.min((t - t0) / dur, 1), e = 1 - Math.pow(1 - k, 3);
+      el.textContent = eur(to * e);
+      if (k < 1) requestAnimationFrame(tick); else el.textContent = eur(to);
+    };
+    requestAnimationFrame(tick);
+  });
 }
 
 const colorDot = c => `<span class="dot" style="background:${c}"></span>`;
 const signed = n => `<span class="${n < 0 ? 'neg' : 'pos'}">${eur(n)}</span>`;
 
+const avatar = (m, size = 38) => `<span class="avatar" style="background:${m.color};width:${size}px;height:${size}px;font-size:${size * .45}px">${esc(m.name.trim().charAt(0).toUpperCase())}</span>`;
+
+/** Anneau SVG animé : segments { v, c } rapportés à `total`. */
+function ring(segs, { size = 160, stroke = 12, total, center = '', round = false } = {}) {
+  const sum = segs.reduce((a, x) => a + x.v, 0);
+  const tot = total || sum || 1;
+  let start = 0;
+  const gap = segs.length > 1 ? 0.8 : 0;
+  const arcs = segs.filter(x => x.v > 0).map((x, i) => {
+    const len = Math.min(x.v / tot * 100, 100 - start);
+    const d = `<circle class="seg" cx="50" cy="50" r="${50 - stroke / 2 - 1}" pathLength="100" fill="none" stroke="${x.c}" stroke-width="${stroke}" ${round ? 'stroke-linecap="round"' : ''} style="stroke-dasharray:${Math.max(len - gap, 0.01)} ${100 - Math.max(len - gap, 0.01)};stroke-dashoffset:${-start};--d:${i * 90}ms"/>`;
+    start += len;
+    return d;
+  }).join('');
+  return `<div class="ring" style="width:${size}px;height:${size}px"><svg viewBox="0 0 100 100"><g transform="rotate(-90 50 50)"><circle cx="50" cy="50" r="${50 - stroke / 2 - 1}" fill="none" stroke="var(--line)" stroke-width="${stroke}"/>${arcs}</g></svg><div class="ring-c">${center}</div></div>`;
+}
+const countEl = (n, cls = '') => `<span class="${cls}" data-count="${n}">${eur(n)}</span>`;
+
 function viewHome() {
   const sums = state.members.map(m => ({ m, s: memberSummary(m) }));
   const salary = totalSalary();
   const left = sums.reduce((a, x) => a + x.s.left, 0);
-  const common = state.items.filter(i => i.scope === 'common');
-  const cTotal = common.reduce((s, i) => s + i.amount, 0);
-  const byKind = k => common.filter(i => i.kind === k).reduce((s, i) => s + i.amount, 0);
-  const segs = [['Charges fixes', byKind('fixed'), '#6c4cf1'], ['Enveloppes', byKind('envelope'), '#ff7a9c'], ['Épargne', byKind('savings'), '#1fb98f']];
-  let acc = 0;
-  const grad = cTotal ? segs.map(([, v, c]) => { const a = acc; acc += v / cTotal * 100; return `${c} ${a}% ${acc}%`; }).join(',') : 'var(--line) 0 100%';
+  const engaged = salary - left;
+  const kindTotal = k => itemsOf('common', k).reduce((s, i) => s + i.amount, 0);
+  const perso = sums.reduce((a, x) => a + x.s.pFixed + x.s.pEnv, 0);
+  const persoSav = sums.reduce((a, x) => a + x.s.pSav, 0);
+  const segs = [
+    { l: 'Charges communes', v: kindTotal('fixed'), c: '#6c4cf1' },
+    { l: 'Enveloppes communes', v: kindTotal('envelope'), c: '#ff7a9c' },
+    { l: 'Épargne commune', v: kindTotal('savings'), c: '#1fb98f' },
+    { l: 'Dépenses perso', v: perso, c: '#f5a524' },
+    { l: 'Épargne perso', v: persoSav, c: '#2fb4e8' },
+    { l: 'Reste à vivre', v: Math.max(left, 0), c: '#b4ead2' }
+  ];
+  const ringTotal = Math.max(salary, engaged) || 1;
+  const [y, mo] = ui.month.split('-').map(Number);
+  const perDay = left / new Date(y, mo, 0).getDate();
   const st = settlement();
   const [A, B] = state.members;
 
-  const memberCard = ({ m, s }) => {
-    const parts = [['Part commune', s.cFixed + s.cEnv + s.cSav, m.color], ['Fixes perso', s.pFixed, '#f5a524'], ['Enveloppes perso', s.pEnv, '#ff7a9c'], ['Épargne perso', s.pSav, '#1fb98f']];
-    const base = Math.max(m.salary, s.total, 1);
-    return `<div class="card">
-      <div class="who">${colorDot(m.color)}${esc(m.name)}</div>
-      <div class="lbl">Reste à vivre</div><div class="big">${signed(s.left)}</div>
-      <div class="stack">${parts.map(([, v, c]) => `<i style="width:${v / base * 100}%;background:${c}"></i>`).join('')}</div>
-      <div class="line"><span>Salaire net</span><b>${eur(m.salary)}</b></div>
-      <div class="line"><span>Charges communes</span><span>${eur(s.cFixed)}</span></div>
-      <div class="line"><span>Enveloppes communes</span><span>${eur(s.cEnv)}</span></div>
-      <div class="line"><span>Épargne commune</span><span>${eur(s.cSav)}</span></div>
-      <div class="line"><span>Charges perso</span><span>${eur(s.pFixed)}</span></div>
-      <div class="line"><span>Enveloppes perso</span><span>${eur(s.pEnv)}</span></div>
-      <div class="line"><span>Épargne perso</span><span>${eur(s.pSav)}</span></div>
-      <div class="line total"><span>Total engagé</span><span>${eur(s.total)}</span></div>
-    </div>`;
+  const envs = state.items.filter(i => i.kind === 'envelope' && i.amount > 0).sort((p, q) => (q.scope === 'common') - (p.scope === 'common'));
+  const envBudget = envs.reduce((a, i) => a + i.amount, 0), envSpent = envs.reduce((a, i) => a + spent(i), 0);
+  const savs = state.items.filter(i => i.kind === 'savings' && i.target);
+  const tone = r => r > 1 ? 'var(--bad)' : r > .8 ? 'var(--warn)' : 'var(--accent)';
+
+  const memberCard = ({ m, s }, i) => {
+    const pctUsed = m.salary > 0 ? s.total / m.salary : 0;
+    const parts = [['Charges, enveloppes et épargne communes', s.cFixed + s.cEnv + s.cSav, m.color], ['Charges perso', s.pFixed, '#f5a524'], ['Enveloppes perso', s.pEnv, '#ff7a9c'], ['Épargne perso', s.pSav, '#1fb98f']];
+    return `<div class="card hitem rise" style="--i:${i + 2}">
+      <div class="who">${avatar(m)}<span style="flex:1">${esc(m.name)}</span><span class="lbl">${eur(m.salary)}</span></div>
+      <div class="member-main">
+        <div><div class="lbl">Reste à vivre</div><div class="big ${s.left < 0 ? 'neg' : ''}">${countEl(s.left)}</div>
+        <div class="lbl">${eur(s.total)} engagés</div></div>
+        ${ring([{ v: Math.min(s.total, m.salary || s.total), c: m.color }], { size: 74, stroke: 11, total: Math.max(m.salary, s.total) || 1, round: true, center: `<b>${Math.round(pctUsed * 100)}%</b>` })}
+      </div>
+      <div class="stack">${parts.map(([, v, c]) => `<i style="width:${v / Math.max(m.salary, s.total, 1) * 100}%;background:${c}"></i>`).join('')}</div>
+      <details><summary>Voir le détail</summary>
+        <div class="line"><span>Charges communes</span><span>${eur(s.cFixed)}</span></div>
+        <div class="line"><span>Enveloppes communes</span><span>${eur(s.cEnv)}</span></div>
+        <div class="line"><span>Épargne commune</span><span>${eur(s.cSav)}</span></div>
+        <div class="line"><span>Charges perso</span><span>${eur(s.pFixed)}</span></div>
+        <div class="line"><span>Enveloppes perso</span><span>${eur(s.pEnv)}</span></div>
+        <div class="line"><span>Épargne perso</span><span>${eur(s.pSav)}</span></div>
+        <div class="line total"><span>Total engagé</span><span>${eur(s.total)}</span></div>
+      </details></div>`;
   };
 
-  const envs = state.items.filter(i => i.kind === 'envelope' && spent(i) > 0)
-    .sort((x, y) => spent(y) / y.amount - spent(x) / x.amount).slice(0, 6);
-  const savs = state.items.filter(i => i.kind === 'savings' && i.target);
+  const envTile = i => {
+    const r = i.amount ? spent(i) / i.amount : 0;
+    return `<div class="tile">${ring([{ v: Math.max(Math.min(spent(i), i.amount), spent(i) ? 0.5 : 0), c: tone(r) }], { size: 64, stroke: 10, total: i.amount, round: true, center: `<span class="tile-e">${esc(i.icon)}</span>` })}
+      <div class="tile-n">${esc(i.name)}</div><div class="tile-s">${i.amount - spent(i) < 0 ? '<span class="neg">−' + eur(spent(i) - i.amount) + '</span>' : eur(i.amount - spent(i)) + ' restant'}</div></div>`;
+  };
+
+  const savCard = i => {
+    const b = saved(i), r = i.target ? Math.min(b / i.target, 1) : 0;
+    const rest = Math.max(i.target - b, 0), months = i.amount > 0 && rest > 0 ? Math.ceil(rest / i.amount) : 0;
+    return `<div class="card hitem sav-card">${ring([{ v: Math.max(r * 100, b > 0 ? 1 : 0), c: '#1fb98f' }], { size: 84, stroke: 11, total: 100, round: true, center: `<span class="tile-e" style="font-size:24px">${esc(i.icon)}</span>` })}
+      <div class="sav-info"><b>${esc(i.name)}</b><div class="lbl">${i.scope === 'common' ? 'Commun' : esc(memberById(i.scope).name)}</div>
+      <div class="sav-amt">${eur(b)}<small> / ${eur(i.target)}</small></div>
+      <div class="chip">${rest === 0 ? 'Objectif atteint 🎉' : months ? `Encore ${months} mois · ${Math.round(r * 100)}%` : `${Math.round(r * 100)}%`}</div></div></div>`;
+  };
+
+  const balance = st.any ? (() => {
+    const a = st.bal[A.id];
+    if (Math.abs(a) < 0.01) return '<div class="notice ok">Tout est équilibré 🎉</div>';
+    const from = a < 0 ? A : B, to = a < 0 ? B : A;
+    return `<div class="swap">${avatar(from, 46)}<div class="swap-mid"><div class="swap-arrow"></div><b>${eur(Math.abs(a))}</b></div>${avatar(to, 46)}</div>
+      <p style="text-align:center;margin:10px 0 0"><b>${esc(from.name)}</b> doit à <b>${esc(to.name)}</b></p>
+      <p class="lbl" style="text-align:center"><a href="#" data-act="nav" data-v="debts" style="color:inherit">Voir le décompte</a></p>`;
+  })() : '<p class="lbl">Note une dépense commune avec le bouton + en indiquant qui a payé : le « qui doit quoi » apparaîtra ici.</p>';
 
   return `
-  <div class="card">
-    <div class="lbl">Reste à vivre du foyer · par mois</div>
-    <div class="big ${left < 0 ? 'neg' : ''}">${eur(left)}</div>
-    <div class="mini-row">
-      <div class="mini g">Revenus nets<b>${eur(salary)}</b></div>
-      <div class="mini p">Engagé<b>${eur(salary - left)}</b></div>
-      <div class="mini y">Épargne / mois<b>${eur(state.items.filter(i => i.kind === 'savings').reduce((s, i) => s + i.amount, 0))}</b></div>
+  <div class="card hero2 rise">
+    <div class="hero2-top"><div><div class="lbl">Reste à vivre du foyer</div>
+      <div class="big ${left < 0 ? 'neg' : ''}">${countEl(left)}</div>
+      <span class="pill">≈ ${eur(perDay)} / jour</span></div></div>
+    <div class="hero2-body">
+      ${ring(segs.map(x => ({ v: x.v, c: x.c })), { size: 176, stroke: 13, total: ringTotal, center: `<span class="ring-big">${Math.round(engaged / (salary || 1) * 100)}%</span><span class="lbl">du revenu<br>engagé</span>` })}
+      <div class="legend2">${segs.filter(x => x.v > 0).map(x => `<div><span class="dot" style="background:${x.c}"></span><span class="lg-l">${x.l}</span><b>${eur(x.v)}</b></div>`).join('')}</div>
     </div>
+    <div class="mini-row"><div class="mini g">Revenus<b>${eur(salary)}</b></div><div class="mini p">Engagé<b>${eur(engaged)}</b></div></div>
   </div>
-  <div class="grid g2" style="margin-top:12px">${sums.map(memberCard).join('')}</div>
-  <div class="grid g2" style="margin-top:12px">
-    <div class="card"><h2>Répartition du budget commun</h2>
-      <div class="donut-wrap">
-        <div class="donut" style="background:conic-gradient(${grad})"><b><span>${eur(cTotal)}<br><small class="lbl">/ mois</small></span></b></div>
-        <div style="flex:1;min-width:150px">${segs.map(([l, v, c]) => `<div class="line"><span>${colorDot(c)} ${l}</span><b>${eur(v)}</b></div>`).join('')}</div>
-      </div>
-    </div>
-    <div class="card"><h2>Équilibre du mois</h2>
-      ${st.any ? (() => {
-        const a = st.bal[A.id];
-        return Math.abs(a) < 0.01 ? '<div class="notice ok">Tout est équilibré 🎉</div>'
-          : `<div class="notice">${esc((a < 0 ? A : B).name)} doit <b>${eur(Math.abs(a))}</b> à ${esc((a < 0 ? B : A).name)}</div>
-             <p class="lbl"><a href="#" data-act="nav" data-v="debts" style="color:inherit">Voir le détail du décompte</a></p>`;
-      })() : '<p class="lbl">Note des dépenses sur les enveloppes communes en indiquant qui a payé : le calcul « qui doit combien » apparaîtra ici.</p>'}
-    </div>
+
+  <div class="sec-head"><h2>Chacun son budget</h2></div>
+  <div class="hscroll">${sums.map(memberCard).join('')}</div>
+
+  <div class="card rise" style="--i:4;margin-top:12px">
+    <h2>Enveloppes · ${new Date(y, mo - 1, 1).toLocaleDateString('fr-FR', { month: 'long' })}</h2>
+    ${envBudget ? `<div class="meta" style="margin:0 0 4px"><span>Dépensé <b style="color:var(--ink)">${eur(envSpent)}</b></span><span>sur ${eur(envBudget)}</span></div>
+    <div class="bar big-bar"><i style="width:${Math.min(envSpent / envBudget, 1) * 100}%;background:${tone(envSpent / envBudget)}"></i></div>` : ''}
+    <div class="tiles">${envs.map(envTile).join('') || '<p class="lbl">Aucune enveloppe pour le moment.</p>'}</div>
   </div>
-  <div class="grid g2" style="margin-top:12px">
-    <div class="card"><h2>Enveloppes ce mois-ci</h2>
-      ${envs.length ? envs.map(i => `<div style="margin-bottom:12px"><div class="meta"><span>${i.icon} ${esc(i.name)}</span><span>${eur(spent(i))} / ${eur(i.amount)}</span></div>${envBar(i)}</div>`).join('') : '<p class="lbl">Aucune dépense notée ce mois-ci.</p>'}
-    </div>
-    <div class="card"><h2>Objectifs d’épargne</h2>
-      ${savs.length ? savs.map(i => `<div style="margin-bottom:12px"><div class="meta"><span>${i.icon} ${esc(i.name)} ${i.scope === 'common' ? '· commun' : '· ' + esc(memberById(i.scope).name)}</span><span>${eur(saved(i))} / ${eur(i.target)}</span></div>${savBar(i)}</div>`).join('') : '<p class="lbl">Aucun objectif défini.</p>'}
-    </div>
-  </div>`;
+
+  ${savs.length ? `<div class="sec-head"><h2>Objectifs d’épargne</h2></div><div class="hscroll">${savs.map(savCard).join('')}</div>` : ''}
+
+  <div class="card rise" style="--i:6;margin-top:12px"><h2>Équilibre du mois</h2>${balance}</div>`;
 }
 
 function envBar(i) {
